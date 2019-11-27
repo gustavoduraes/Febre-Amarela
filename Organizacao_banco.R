@@ -1,6 +1,5 @@
 require(tidyverse)
 require(lubridate)
-library(caret)
 require(zoo)
 
 
@@ -103,7 +102,9 @@ surv_obj <- Surv(dados_disc$dt_inic,dados_disc$dt_sup, event=dados_disc$TARGET)
 fit <- coxph( surv_obj ~ TGO+TGP+Ht+Leucocitos+Creatinina+cluster(pac),
               data=dados_disc)
 summary(fit)
-
+ajuste_cox <- survfit(fit)
+ajuste_cox$surv
+ajuste_cox$time
 ############### Teste de hipótese da presença de proporcionalidade
 ############### H0 é a hipótese onde os dados são proporcionais, neste caso não se rejeita a hipótese
 ############### de proporcionalidade para nenhuma covariável
@@ -113,7 +114,7 @@ teste_proporcionalidade
 ############### Resíduos e Teste de schoenfeld para analisar a dependência dos coeficientes ao tempo,
 ############## Os testes indicam que não existem evidências para rejeitar-mos a hipótese de independência ao tempo.
 require(survminer)
-ggcoxzph(test.ph)
+ggcoxzph(teste_proporcionalidade)
 
 
 ############ Resíduo de Martingale, deve ser observado para todas as variáveins individualmente
