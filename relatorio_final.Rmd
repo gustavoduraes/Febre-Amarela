@@ -15,13 +15,68 @@ require(tidyverse)
 require(lubridate)
 library(caret)
 require(zoo)
-require(survival)
-require(survminer)
+require(naniar)
+require(FarctoMineR)
+require(missMDA)
+require(VIM)
+require(readxl)
+```
+
+# Análise dos dados pontuais
+
+
+```{r}
+dados_adicionais <- read_excel('Casos_Hum2017_tese.xlsx') %>% filter(CLASSIF_FINAL =='CONFIRMADO' ) %>% 
+  select(ID_BM,EVOLUCAO,TGO,TGP,CREATININA,BD,BT,UREIA,FEBRE:DIARREIA,IDADE,SEXO) %>% filter(!is.na(EVOLUCAO)) %>% 
+  mutate(Desfecho = ifelse(EVOLUCAO=='CURA',0,1)) %>% mutate_at(.vars = c('BD','BT'), .funs = as.numeric)
+
+
+
+```
+
+```{r}
+summary_missing <- dados_adicionais %>%ungroup %>% 
+  miss_var_summary()
+not_missing <-summary_missing %>% filter(n_miss==0) %>% select(variable) %>% pull()
+gg_miss_var(dados_adicionais)
+```
+
+ Existe uma porcentagem de valores faltantes altíssima para algumas variáveis, a modelagem com essa parcela dos dados será um pouco complicada.
+ 
+ Uma saída possível é a utilização das variáveis com a menor proporção de missing (TGO, HEMORRAGIA, BT e BD).
+ 
+ Uma linha de raciocínio interessante é a comparação desse modelo com poucas variáveis com o modelo longitudinal buscando uma possível argumentação 
+ sobre a importância de alguns resultados de exames que discriminam bem o óbito ou não.
+
+
+```{r}
+ajuste_logistica <-glm(Desfecho ~ log2(TGO)+BT+ICTERICIA+IDADE+SEXO,
+  data=dados_adicionais, family=binomial(link='logit'))
+
+ajuste_logistica %>% summary
 ```
 
 
-# Limpeza dos dados 
+## Análise da predição
+```{r}
+prob=predict(ajuste_logistica,type=c("response"))
 
+dados_roc <- dados_adicionais %>%ungroup %>% 
+  select(TGO,BT,ICTERICIA,Desfecho) %>% drop_na() %>% mutate(p= prob)
+require(pROC)
+g <- auc(Desfecho ~ p, data = dados_roc)
+g  
+
+dados_roc <- dados_roc %>% ungroup %>% mutate(predicao = ifelse(p>0.4,1,0))
+
+confusionMatrix(dados_roc$predicao %>% as.factor,dados_roc$Desfecho%>% as.factor,positive='1')
+
+```
+
+
+# Análise dos dados longitudinais
+
+## Limpeza dos dados
 Os pacientes 773, 489 e 212 aparentam apresentar erros no registro da data de evolução.
 
 ```{r}
@@ -30,7 +85,7 @@ mutate(DT_EVOL=replace(DT_EVOL, pac==773, '2017-05-26')) %>%
   mutate(DT_EVOL=replace(DT_EVOL, pac==489, '2017-04-14')) %>% 
   mutate(DT_EVOL=replace(DT_EVOL, pac==212, '2017-02-16'))%>% 
   mutate(DATA_FINAL =difftime(DT_EVOL,DT_IS,units='days') ) %>% 
-  mutate(dt_sup=DIAS,dt_inic =lag(DIAS) ) %>% select(-DIAS) %>% 
+  mutate(dia_doenca=DIAS,dt_inic =lag(DIAS) ) %>% select(-DIAS) %>% 
   mutate(dt_ate_inter =difftime(DT_INTERN,DT_IS,units='days') %>% as.numeric ) 
 
 ```
@@ -39,26 +94,26 @@ mutate(DT_EVOL=replace(DT_EVOL, pac==773, '2017-05-26')) %>%
 ```{r}
 dados <- data %>% 
   select(pac,EVOLUCAO,exame,valor,SEXO,DT_NASC,FEBRE:DIARREIA,
-         dt_inic,dt_sup,DATA_FINAL,OBITO,dt_ate_inter) %>% 
+         dt_inic,dia_doenca,DATA_FINAL,OBITO,dt_ate_inter) %>% 
   mutate(Idade = year(as.Date('2019-12-30'))-year(DT_NASC)) %>% 
   select(-DT_NASC) %>% 
-  spread(exame,valor) %>% mutate(TARGET = ifelse(OBITO =='OBITO',1,0)) %>% 
+  spread(exame,valor) %>% mutate(Desfecho = ifelse(OBITO =='OBITO',1,0)) %>% 
   select(-OBITO,-EVOLUCAO)
 
 ####### Seleção de variáveis
 data_inic <- dados %>% group_by(pac) %>% filter(is.na(dt_inic)) %>% ungroup(pac) %>% 
   select(Idade,SEXO,TGO,TGP,HEMORRAGIA,DOR_ABDOM,MIALGIA,Leucocitos,
-         Bastoes,Creatinina,Linfocitos,Ureia,DATA_FINAL,TARGET)
+         Bastoes,Creatinina,Linfocitos,Ureia,DATA_FINAL,Desfecho)
 ```
 
 
 ```{r}
 dados <- data %>% 
   select(pac,EVOLUCAO,exame,valor,SEXO,DT_NASC,FEBRE:DIARREIA,
-         dt_inic,dt_sup,DATA_FINAL,OBITO,dt_ate_inter) %>% 
+         dt_inic,dia_doenca,DATA_FINAL,OBITO,dt_ate_inter) %>% 
   mutate(Idade = year(as.Date('2019-12-30'))-year(DT_NASC)) %>%
   select(-DT_NASC) %>% 
-  spread(exame,valor) %>% mutate(TARGET = ifelse(OBITO =='OBITO',1,0)) %>%
+  spread(exame,valor) %>% mutate(Desfecho = ifelse(OBITO =='OBITO',1,0)) %>%
   select(-OBITO,-EVOLUCAO)
 ```
 
@@ -68,49 +123,49 @@ dados <- data %>%
 
 <!-- data_inic <- dados %>% group_by(pac) %>% filter(is.na(dt_inic)) %>% ungroup(pac) %>%  -->
 <!--   select(Idade,SEXO,TGO,TGP,HEMORRAGIA,DOR_ABDOM,MIALGIA,Leucocitos, -->
-<!--          Bastoes,Creatinina,Linfocitos,Ureia,DATA_FINAL,ICTERICIA,HEMORRAGIA,TARGET) -->
+<!--          Bastoes,Creatinina,Linfocitos,Ureia,DATA_FINAL,ICTERICIA,HEMORRAGIA,Desfecho) -->
 <!-- ``` -->
 
 # Organização do banco
 
-Nesse cenário todas as observações de um indivíduo que foi a óbito foram consideradas como tendo 
-"Óbito" como variável resposta", essa aplicação é possível e útil pois a utilização do
+Nesse cenário, todas as observações de um indivíduo que foi a óbito foram consideradas como tendo 
+"Óbito" como variável resposta". Essa aplicação se mostra necessária pois, obviamente, é preciso ajustar o modelo para prever o óbito do paciente antes do evento de interesse. Sendo assim, 
 
 
 ```{r}
 
 dados2 <- dados %>% 
-  select(pac,dt_inic,dt_sup,DATA_FINAL,TGO,TGP,TARGET,Idade,Ht,BD,BI,TAP,INR,
+  select(pac,dt_inic,dia_doenca,DATA_FINAL,TGO,TGP,Desfecho,Idade,Ht,BD,BI,TAP,INR,
          Leucocitos,Bastoes,Creatinina,ICTERICIA,HEMORRAGIA,SEXO,dt_ate_inter
          ,Ureia,GamaGT,Fosfatase_alcal,Plaquetas,SINAL_FAGET) %>% 
-  mutate(DATA_FINAL = ifelse(DATA_FINAL<0,max(dt_sup),DATA_FINAL))  
+  mutate(DATA_FINAL = ifelse(DATA_FINAL<0,max(dia_doenca),DATA_FINAL))  %>% 
+filter(dia_doenca <=15)
 
+dados_class <- dados2 %>% group_by(pac) %>% mutate(Desfecho=max(Desfecho))%>% 
+  arrange(pac,dia_doenca) %>% 
+  filter(dia_doenca <=15)
 
-dados_class <- dados2 %>% group_by(pac) %>% mutate(TARGET=max(TARGET))%>% 
-  arrange(pac,dt_sup) %>% 
-  filter(dt_sup <=15)
-
-# dados_completos <- dados2 %>% group_by(pac)%>% filter(any(DATA_FINAL == dt_sup))
+# dados_completos <- dados2 %>% group_by(pac)%>% filter(any(DATA_FINAL == dia_doenca))
 # 
 # dados_faltantes <- dados2 %>% filter(!(pac %in% (dados_completos$pac %>% unique))) 
 # 
 # dados_faltantes_2 <- dados_faltantes %>% 
 #   group_by(pac) %>% 
-#   summarise(dt_inic = max(dt_sup),dt_sup =max(DATA_FINAL)) %>% 
+#   summarise(dt_inic = max(dia_doenca),dia_doenca =max(DATA_FINAL)) %>% 
 #   bind_rows(dados_faltantes,.) %>% arrange(pac) 
 # 
 # dados_final <- bind_rows(dados_completos,dados_faltantes_2)  %>% 
-#   group_by(pac) %>% mutate(TARGET = ifelse(dt_sup==max(dt_sup),max(TARGET,na.rm = TRUE),0))
+#   group_by(pac) %>% mutate(Desfecho = ifelse(dia_doenca==max(dia_doenca),max(Desfecho,na.rm = TRUE),0))
 # 
 # dados_input <- dados_final %>% group_by(pac) %>% 
 #   mutate_at(.vars=vars(DATA_FINAL,TGO,TGP,Ht,Leucocitos,Creatinina,Ht,Idade,SEXO),
-#             .funs=list(~na.locf(., na.rm = FALSE))) %>% filter(dt_sup !=0) %>% 
+#             .funs=list(~na.locf(., na.rm = FALSE))) %>% filter(dia_doenca !=0) %>% 
 #   mutate_at(.vars=vars(DATA_FINAL,TGO,TGP,Ht,Leucocitos,Creatinina,Ht,Idade,SEXO),
 #             .funs=list(~na.locf(., na.rm = FALSE,fromLast=TRUE)))
 # 
 # dados_input <- dados_input%>% 
-#   group_by(pac) %>% mutate(TARGET = ifelse(dt_sup==max(dt_sup),
-#       max(TARGET,na.rm = TRUE),0)) %>% ungroup %>%  mutate(dt_inic = ifelse(is.na(dt_inic),0,dt_inic))
+#   group_by(pac) %>% mutate(Desfecho = ifelse(dia_doenca==max(dia_doenca),
+#       max(Desfecho,na.rm = TRUE),0)) %>% ungroup %>%  mutate(dt_inic = ifelse(is.na(dt_inic),0,dt_inic))
          
 ```
 
@@ -121,49 +176,36 @@ dados_class <- dados2 %>% group_by(pac) %>% mutate(TARGET=max(TARGET))%>%
 
 <!-- ```{r} -->
 <!-- require(ggplot2) -->
-<!-- dados_plot <- dados_class %>% mutate(TARGET =ifelse(TARGET==1,'Óbito','Cura') ) -->
-<!-- ggplot(data=dados_plot,aes(y=Idade,x=TARGET))+geom_boxplot() -->
-<!-- ggplot(data=dados_plot,aes(y=TAP,x=TARGET))+geom_boxplot() -->
-<!-- ggplot(data=dados_plot,aes(y=INR,x=TARGET))+geom_boxplot() -->
-<!-- ggplot(data=dados_plot,aes(y=Leucocitos,x=TARGET))+geom_boxplot() -->
-<!-- ggplot(data=dados_plot,aes(y=Ht,x=TARGET))+geom_boxplot() -->
-<!-- ggplot(data=dados_plot,aes(y=dt_ate_inter,x=TARGET))+geom_boxplot() -->
-<!-- ggplot(data=dados_plot,aes(y=dt_sup,x=TARGET))+geom_boxplot()+ylim(c(0,50)) -->
-<!-- ggplot(data=dados_plot,aes(y=Plaquetas,x=TARGET))+geom_boxplot() -->
-<!-- ggplot(data=dados_plot,aes(y=Creatinina,x=TARGET))+geom_boxplot() -->
-<!-- dados_plot %>%ungroup() %>%  select(HEMORRAGIA,TARGET) %>% table -->
-<!-- dados_plot %>%ungroup() %>%  select(ICTERICIA,TARGET) %>% table -->
+<!-- dados_plot <- dados_class %>% mutate(Desfecho =ifelse(Desfecho==1,'Óbito','Cura') ) -->
+<!-- ggplot(data=dados_plot,aes(y=Idade,x=Desfecho))+geom_boxplot() -->
+<!-- ggplot(data=dados_plot,aes(y=TAP,x=Desfecho))+geom_boxplot() -->
+<!-- ggplot(data=dados_plot,aes(y=INR,x=Desfecho))+geom_boxplot() -->
+<!-- ggplot(data=dados_plot,aes(y=Leucocitos,x=Desfecho))+geom_boxplot() -->
+<!-- ggplot(data=dados_plot,aes(y=Ht,x=Desfecho))+geom_boxplot() -->
+<!-- ggplot(data=dados_plot,aes(y=dt_ate_inter,x=Desfecho))+geom_boxplot() -->
+<!-- ggplot(data=dados_plot,aes(y=dia_doenca,x=Desfecho))+geom_boxplot()+ylim(c(0,50)) -->
+<!-- ggplot(data=dados_plot,aes(y=Plaquetas,x=Desfecho))+geom_boxplot() -->
+<!-- ggplot(data=dados_plot,aes(y=Creatinina,x=Desfecho))+geom_boxplot() -->
+<!-- dados_plot %>%ungroup() %>%  select(HEMORRAGIA,Desfecho) %>% table -->
+<!-- dados_plot %>%ungroup() %>%  select(ICTERICIA,Desfecho) %>% table -->
 <!-- ``` -->
-
-
-
 
 
 # Análise de dados Faltantes
 
 ```{r}
-require(naniar)
 summary_missing <- dados_class %>%ungroup %>% 
   miss_var_summary()
 not_missing <-summary_missing %>% filter(n_miss==0) %>% select(variable) %>% pull()
-```
-
-```{r}
-require(naniar)
-require(FarctoMineR)
-require(missMDA)
-require(VIM)
 gg_miss_var(dados_class %>% ungroup %>% 
-    select(-c(pac,dt_inic,dt_sup,DATA_FINAL,TARGET,SEXO)))
-res<-summary(aggr(dados_class %>% ungroup %>% 
-    select(-c(pac,dt_inic,dt_sup,DATA_FINAL,TARGET,SEXO)), sortVar=TRUE))$combinations
+    select(-c(pac,dt_inic,dia_doenca,DATA_FINAL,Desfecho,SEXO)))
 
 
 ```
 
  Devemos evitar utilizar variáveis com muitos valores faltantes
 
-#Inputação de valores utilizando substituindo o valor faltante pelo registro do dia anterior. 
+##Inputação de valores utilizando substituindo o valor faltante pelo registro do dia anterior. 
  
 Caso o registro do dia anterior também esteja faltante, o registro do dia posterior é utilizado.
 
@@ -176,44 +218,33 @@ dados_class_fill <- dados_class %>%group_by(pac) %>%
 ```
 
 
-# Dados Agrupados
-```{r}
-media_na <- function(x){mean(x,na.rm=TRUE)}
-dados_agrupados <- dados_class_fill %>% group_by(pac) %>% summarise(dt_inic=min(dt_inic),
-dt_sup=max(dt_sup))
-
-```
-
-
-
-
-# Estatísticas resumo após imputação
+## Estatísticas resumo após imputação
 
 ```{r include=FALSE}
 require(ggplot2)
-dados_plot <- dados_class_fill %>% mutate(TARGET =ifelse(TARGET==1,'Óbito','Cura') )
-ggplot(data=dados_plot,aes(y=Idade,x=TARGET))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=TAP,x=TARGET))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=INR,x=TARGET))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=Leucocitos,x=TARGET))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=Ht,x=TARGET))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=dt_ate_inter,x=TARGET))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=dt_sup,x=TARGET))+geom_boxplot()+ylim(c(0,50))
-ggplot(data=dados_plot,aes(y=Plaquetas,x=TARGET))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=Creatinina,x=TARGET))+geom_boxplot()
-dados_plot %>%ungroup() %>%  select(HEMORRAGIA,TARGET) %>% table
-dados_plot %>%ungroup() %>%  select(ICTERICIA,TARGET) %>% table
+dados_plot <- dados_class_fill %>% mutate(Desfecho =ifelse(Desfecho==1,'Óbito','Cura') )
+ggplot(data=dados_plot,aes(y=Idade,x=Desfecho))+geom_boxplot()
+ggplot(data=dados_plot,aes(y=TAP,x=Desfecho))+geom_boxplot()
+ggplot(data=dados_plot,aes(y=INR,x=Desfecho))+geom_boxplot()
+ggplot(data=dados_plot,aes(y=Leucocitos,x=Desfecho))+geom_boxplot()
+ggplot(data=dados_plot,aes(y=Ht,x=Desfecho))+geom_boxplot()
+ggplot(data=dados_plot,aes(y=dt_ate_inter,x=Desfecho))+geom_boxplot()
+ggplot(data=dados_plot,aes(y=dia_doenca,x=Desfecho))+geom_boxplot()+ylim(c(0,50))
+ggplot(data=dados_plot,aes(y=Plaquetas,x=Desfecho))+geom_boxplot()
+ggplot(data=dados_plot,aes(y=Creatinina,x=Desfecho))+geom_boxplot()
+dados_plot %>%ungroup() %>%  select(HEMORRAGIA,Desfecho) %>% table
+dados_plot %>%ungroup() %>%  select(ICTERICIA,Desfecho) %>% table
 ```
 
-# Gráfico Creatinina
+## Gráfico Creatinina
 ```{r}
-ggplot(data=dados_plot %>% filter(dt_sup>0),aes(y=Creatinina,fill=TARGET,x=as.factor(dt_sup)))+
+ggplot(data=dados_plot %>% filter(dia_doenca>0),aes(y=Creatinina,fill=Desfecho,x=as.factor(dia_doenca)))+
   geom_boxplot()+xlab("Dia de doença")
 ```
 
 
 
-# Correlações
+## Correlações
 
 ```{r}
 require(corrplot)
@@ -223,13 +254,13 @@ corrplot(M, method = "number")
 ```
 
 
-Ainda existem alguns dados faltantes de ICTERICIA que não podem ser inputados pois não existe o regristro anível de paciente.
+Ainda existem  dados faltantes de ICTERICIA que não podem ser inputados pois não existe o regristro anível de paciente.
 
 \newpage
 
-# Análise longitudinal dos dados (GEE)
+# Aplicação de equações de estimação generalizadas (GEE)
 
-O método de equações de estimação generalizado é uma alternativa para a modelagem de dados longitudinais.
+O método de equações de estimação generalizadas (GEE) é uma alternativa para a modelagem de dados longitudinais.
 
 Essa técnica de modelagem requer a indicação de uma estrutura de correlação entre o tempo e estima o efeito médio populacional 
 das variáveis explicativas  levando em consideração a correlação interna de cada paciente.
@@ -245,21 +276,31 @@ Onde:
 
 - $V_i$ é a estrutura de correlação do tempo.
 
+
+Nessa aplicação as GEE nos fornencem uma estimativa da probabilidade de óbito para um indivíduo infectado com o vírus da febre amarela, independe do dia de doença em que ele se encontrar.
+
 ```{r}
 require(geepack)
-dados_scaled <- dados2  %>% mutate(Plaquetas=log2(Plaquetas),Leucocitos=log2(Leucocitos),
-                                       TGO=log2(TGO),TGP=log2(TGP)) %>% select(-dt_inic) %>% 
+dados_scaled <- dados2  %>% mutate(TGO=log(TGO)) %>% select(-dt_inic) %>% 
   ungroup %>% mutate(pac = as.factor(pac)) %>%
-  select(Ht,TGO,pac,dt_sup,Plaquetas,TARGET,ICTERICIA,dt_ate_inter) %>% 
-  group_by(pac) %>% mutate(number = row_number()) %>% 
+  select(TGO,ICTERICIA,pac,dia_doenca,Desfecho,SEXO,Idade) %>% 
+  group_by(pac) %>% mutate(Idade= ifelse(Idade <=40,'<=40 ','>40')) %>% 
   drop_na() 
 
-ajuste_gee<- geeglm(TARGET~Plaquetas+Ht+TGO+ICTERICIA,id=pac, data=dados_scaled,
-family=binomial(link='logit'),waves = dt_sup,corstr='independence', std.err="san.se")
+ajuste_gee<- geeglm(Desfecho~TGO+ICTERICIA+Idade+SEXO,id=pac, data=dados_scaled,
+family=binomial(link='logit'),corstr='ar1')
 
 
 summary(ajuste_gee)
 ```
+```{r}
+anova(ajuste_gee)
+```
+## Explicação do modelo
+
+Foi-se escolhido um modelo com estrutura de correlações baseadas em um processo auto regressivo de ordem um que resultou em um valor
+$\alpha$ para a matriz de correlações de 0.972. Optou-se por utilizar o logarítmo natural da variável TGO afim de suavizar o comportamento dessa variável. Além disso, a variável de idade foi dicotomizada afim de melhor sua significância estatística.
+
 
 
 ## Interpretação das variávies
@@ -267,17 +308,15 @@ summary(ajuste_gee)
 Estimativas Negativas indicam diminuição na razão de chances de óbito e estimativas prositivas indicam aumento, 
 mesma interpretação da regressão logística.
 
-- A cada vez que a contangem de Plaquetas dobra a razão de chances de óbito aumenta exp(0.7073)=2.03 vezes
 
-- O aumento de uma unidade de HT aumenta a razão de chances de cura em exp(-0.1223)=0.885 vezes. 
+- O aumento de uma unidade de HT aumenta a razão de chances de cura em = vezes. 
 
-- A cada vez que a contangem de TGO dobra a razão de chances de óbito aumenta exp(0.8878)=2.43 vezes
+- Um aumento de uma unidade no logratímo do TGO aumenta razão de chances de óbito em exp(0.0641)=1.07 vezes
 
-- A presença do sintoma de Icterícia aumenta a razão de chances de óbito em exp(1.1229)=3.07 vezes.
+- A presença do sintoma de Icterícia aumenta a razão de chances de óbito em exp(1.6710)=5.32 vezes.
 
 
-As demais variáveis não se mostraram significativas
-
+As variáveis de SEXO e idade não se mostraram significativas mas foram incluídas.
 
 
 
@@ -286,17 +325,23 @@ As demais variáveis não se mostraram significativas
 prob=predict(ajuste_gee,type=c("response"))
 
 dados_roc <- dados_scaled %>%ungroup %>% 
-  select(TARGET,Plaquetas,Ht,TGO,ICTERICIA) %>% 
+  select(Desfecho,TGO,ICTERICIA,pac,dia_doenca) %>% 
 mutate(p= prob)
 require(pROC)
-g <- auc(TARGET ~ p, data = dados_roc)
+g <- auc(Desfecho ~ p, data = dados_roc)
 g  
 
-dados_roc <- dados_roc %>% ungroup %>% mutate(predicao = ifelse(p>0.5,1,0))
+dados_roc <- dados_roc %>% ungroup %>% mutate(predicao = ifelse(p>0.45,1,0))
 
-confusionMatrix(dados_roc$predicao %>% as.factor,dados_roc$TARGET%>% as.factor,positive='1')
+confusionMatrix(dados_roc$predicao %>% as.factor,dados_roc$Desfecho%>% as.factor,positive='1')
+```
+
+
+```{r}
+algum_acerto <- dados_roc %>% select(pac,p,Desfecho,dia_doenca) %>%group_by(pac) %>%  filter(Desfecho ==1)
 
 ```
+
 
 É importante notar que apesar da acurácia não ser extremamente alta, estamos falando da acurária de predição para todos os registros observados. Em alguns períodos de doença a diferenciação de indivíduos pode ser mais complexa.
 
@@ -308,21 +353,24 @@ Podemos nos basear no primeiro registro observado para construir uma árvore de 
 require(rpart)
 require(rattle)
 dados_primeira_obs=dados2  %>% mutate(Plaquetas=log2(Plaquetas),Leucocitos=log2(Leucocitos),
-                                       TGO=log2(TGO),TGP=log2(TGP)) %>% select(-dt_inic) %>% group_by(pac) %>% 
-  filter(dt_sup==min(dt_sup))
+                                       TGO=log(TGO),TGP=log2(TGP)) %>% select(-dt_inic) %>% group_by(pac) %>% 
+  filter(dia_doenca==min(dia_doenca))
 
-Arvore = rpart(TARGET~ Ht + TGO + ICTERICIA  +Plaquetas, data=dados_primeira_obs,maxdepth=6,method='class')
+Arvore = rpart(Desfecho~ Idade+SEXO+TGO+ICTERICIA,data=dados_primeira_obs,maxdepth=6,method='class')
 fancyRpartPlot(Arvore)
 t_pred <- predict(Arvore,dados_primeira_obs)[,1]
 
 
-confusionMatrix(ifelse(t_pred<.5,1,0) %>% as.factor,dados_primeira_obs$TARGET %>% as.factor,positive='1')
+confusionMatrix(ifelse(t_pred<.5,1,0) %>% as.factor,dados_primeira_obs$Desfecho %>% as.factor,positive='1')
 
 
 ```
 
 O resultado baseando-se apenas em uma variável já tem uma discriminação aceitável, tem em vista que 88% dos casos que não vão a óbito
-tem o valor do TGO inferior a 2^13 = 8192 e 82% dos casos de óbito te valor do TGO superior a 8192
+tem o valor do TGO inferior a exp(8.7) = 6003 e 88% dos casos de óbito te valor do TGO superior a 6003
+
+
+
 
 <!-- library(ggplot2) -->
 <!-- p <- ggplot(data, aes(x = Caffeine, y = Recall, colour = Subject)) + -->
@@ -355,8 +403,8 @@ tem o valor do TGO inferior a 2^13 = 8192 e 82% dos casos de óbito te valor do 
 <!-- ```{r} -->
 <!-- ########## Ajuste do modelo de regressão de cox considerando algumas variáveis -->
 <!-- require(icenReg) -->
-<!-- dados_intervalares <- dados_input %>% mutate(dt_sup = ifelse(dt_sup == DATA_FINAL,NA,dt_sup)) -->
-<!-- surv_obj <- Surv(dados_intervalares$dt_inic,dados_intervalares$dt_sup,type='interval2') -->
+<!-- dados_intervalares <- dados_input %>% mutate(dia_doenca = ifelse(dia_doenca == DATA_FINAL,NA,dia_doenca)) -->
+<!-- surv_obj <- Surv(dados_intervalares$dt_inic,dados_intervalares$dia_doenca,type='interval2') -->
 
 <!-- fit_weibull = ic_sp(surv_obj ~ Ht+log(TGP)+log(Leucocitos), data = dados_intervalares) -->
 
@@ -373,7 +421,7 @@ tem o valor do TGO inferior a 2^13 = 8192 e 82% dos casos de óbito te valor do 
 <!-- dados_teste <- dados_input %>% drop_na() -->
 <!-- # allocates the estimated parameters and covariance matrix -->
 <!-- output <- inter_frailty(dados_teste,  -->
-<!--                         dados_teste$dt_inic, dados_teste$dt_sup, dados_teste$TARGET,  -->
+<!--                         dados_teste$dt_inic, dados_teste$dia_doenca, dados_teste$Desfecho,  -->
 <!--                         c("Ht", "TGP"), c("Ht", "TGP"), -->
 <!--                         M = 30, max_n = 30, burn_in = 10) -->
 
@@ -385,7 +433,7 @@ tem o valor do TGO inferior a 2^13 = 8192 e 82% dos casos de óbito te valor do 
 <!-- ```{r} -->
 <!-- require(coxinterval) -->
 <!-- dados_teste <- dados_intervalares %>% filter(!is.na(TGO)) %>% group_by(pac) %>% sample_n(1) -->
-<!-- surv_obj <- Surv(dados_intervalares$dt_inic,dados_intervalares$dt_sup,type='interval2') -->
+<!-- surv_obj <- Surv(dados_intervalares$dt_inic,dados_intervalares$dia_doenca,type='interval2') -->
 
 
 <!-- fit_1<-coxaalen(surv_obj~Ht,data=dados_teste) -->
