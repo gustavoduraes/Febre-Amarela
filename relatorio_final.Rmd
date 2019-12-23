@@ -28,7 +28,7 @@ require(readxl)
 ```{r}
 dados_adicionais <- read_excel('Casos_Hum2017_tese.xlsx') %>% filter(CLASSIF_FINAL =='CONFIRMADO' ) %>% 
   select(ID_BM,EVOLUCAO,TGO,TGP,CREATININA,BD,BT,UREIA,FEBRE:DIARREIA,IDADE,SEXO) %>% filter(!is.na(EVOLUCAO)) %>% 
-  mutate(Desfecho = ifelse(EVOLUCAO=='CURA',0,1)) %>% mutate_at(.vars = c('BD','BT'), .funs = as.numeric)
+  mutate(Desfecho = ifelse(EVOLUCAO=='OBITO',1,0)) %>% mutate_at(.vars = c('BD','BT'), .funs = as.numeric)
 
 
 
