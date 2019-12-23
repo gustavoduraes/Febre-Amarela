@@ -283,11 +283,11 @@ Nessa aplicação as GEE nos fornencem uma estimativa da probabilidade de óbito
 require(geepack)
 dados_scaled <- dados2  %>% mutate(TGO=log(TGO)) %>% select(-dt_inic) %>% 
   ungroup %>% mutate(pac = as.factor(pac)) %>%
-  select(TGO,ICTERICIA,pac,dia_doenca,Desfecho,SEXO,Idade) %>% 
+  select(TGO,ICTERICIA,pac,dia_doenca,Desfecho,SEXO,Idade,Creatinina) %>% 
   group_by(pac) %>% mutate(Idade= ifelse(Idade <=40,'<=40 ','>40')) %>% 
   drop_na() 
 
-ajuste_gee<- geeglm(Desfecho~TGO+ICTERICIA+Idade+SEXO,id=pac, data=dados_scaled,
+ajuste_gee<- geeglm(Desfecho~TGO+ICTERICIA+Idade+SEXO + Creatinina,id=pac, data=dados_scaled,
 family=binomial(link='logit'),corstr='ar1')
 
 
@@ -309,12 +309,13 @@ Estimativas Negativas indicam diminuição na razão de chances de óbito e esti
 mesma interpretação da regressão logística.
 
 
-- O aumento de uma unidade de HT aumenta a razão de chances de cura em = vezes. 
+
 
 - Um aumento de uma unidade no logratímo do TGO aumenta razão de chances de óbito em exp(0.0641)=1.07 vezes
 
 - A presença do sintoma de Icterícia aumenta a razão de chances de óbito em exp(1.6710)=5.32 vezes.
 
+- O aumento de uma unidade na variável Creatinina aumenta a razão de chances de cura em exp() = vezes. 
 
 As variáveis de SEXO e idade não se mostraram significativas mas foram incluídas.
 
