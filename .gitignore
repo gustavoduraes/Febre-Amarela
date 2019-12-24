@@ -4,4 +4,6 @@
 .Ruserdata
 *.r
 *.xlsx
-.Rhistory
+*.Rhistory
+*.Rproj
+*.rds

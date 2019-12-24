@@ -1,8 +1,8 @@
 ---
 title: "Relatório"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -223,24 +223,121 @@ dados_class_fill <- dados_class %>%group_by(pac) %>%
 ```{r include=FALSE}
 require(ggplot2)
 dados_plot <- dados_class_fill %>% mutate(Desfecho =ifelse(Desfecho==1,'Óbito','Cura') )
-ggplot(data=dados_plot,aes(y=Idade,x=Desfecho))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=TAP,x=Desfecho))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=INR,x=Desfecho))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=Leucocitos,x=Desfecho))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=Ht,x=Desfecho))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=dt_ate_inter,x=Desfecho))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=dia_doenca,x=Desfecho))+geom_boxplot()+ylim(c(0,50))
-ggplot(data=dados_plot,aes(y=Plaquetas,x=Desfecho))+geom_boxplot()
-ggplot(data=dados_plot,aes(y=Creatinina,x=Desfecho))+geom_boxplot()
 dados_plot %>%ungroup() %>%  select(HEMORRAGIA,Desfecho) %>% table
 dados_plot %>%ungroup() %>%  select(ICTERICIA,Desfecho) %>% table
 ```
 
+
 ## Gráfico Creatinina
 ```{r}
-ggplot(data=dados_plot %>% filter(dia_doenca>0),aes(y=Creatinina,fill=Desfecho,x=as.factor(dia_doenca)))+
-  geom_boxplot()+xlab("Dia de doença")
+#png("Creatinina1.png", units="in", width=8, height=5, res=300)
+ggplot(data=dados_plot %>% filter(dia_doenca>0) %>% mutate(Outcome=Desfecho),aes(y=Creatinina,fill=Outcome,x=as.factor(dia_doenca)))+
+  geom_boxplot()+xlab("Dia de doença")+theme_light()+ 
+  scale_fill_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+
+  ylab('Creatinine')+
+  ggtitle('Creatinine levels by time of disease')
+# dev.off()
+
+# png("Creatinina2.png", units="in", width=8, height=5, res=300)
+ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,Creatinina,group=pac,color=Outcome)) + 
+  stat_smooth(method='lm',se=F)+ 
+  theme_light()+ 
+  scale_color_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+
+  ylab('Creatinine')+
+  ggtitle('Creatinine levels by time of disease')
+# dev.off()
+
+
 ```
+
+## Gráfico TGO
+
+```{r}
+
+# png("TGO1.png", units="in", width=8, height=5, res=300)
+ggplot(data=dados_plot %>% filter(dia_doenca>0) %>% mutate(Outcome=Desfecho),aes(y=TGO,fill=Outcome,x=as.factor(dia_doenca)))+
+  geom_boxplot()+xlab("Dia de doença")+theme_light()+ 
+  scale_fill_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+
+  ylab('ASL')+
+  ggtitle('ASL levels by time of disease')
+# dev.off()
+
+# png("TGO2.png", units="in", width=8, height=5, res=300)
+ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,TGO,group=pac,color=Outcome)) + 
+  stat_smooth(method='lm',se=F) + 
+  theme_light()+ 
+  scale_color_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+ylab('AST')+
+  ggtitle('AST levels by time of disease')
+# dev.off()
+```
+
+
+## Gráfico TGP
+
+
+```{r}
+
+# png("TGP1.png", units="in", width=8, height=5, res=300)
+ggplot(data=dados_plot %>% filter(dia_doenca>0) %>% mutate(Outcome=Desfecho),aes(y=TGP,fill=Outcome,x=as.factor(dia_doenca)))+
+  geom_boxplot()+xlab("Dia de doença")+theme_light()+ 
+  scale_fill_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+
+  ylab('ALT')+
+  ggtitle('ALT levels by time of disease')
+# dev.off()
+
+# png("TGP2.png", units="in", width=8, height=5, res=300)
+ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,TGP,group=pac,color=Outcome)) + 
+  stat_smooth(method='lm',se=F) + 
+  theme_light()+ 
+  scale_color_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+ylab('ALT')+
+  ggtitle('ALT levels by time of disease')
+# dev.off()
+```
+
+
+## Gráficos Plaquetas
+
+```{r}
+
+# png("Plaquetas1.png", units="in", width=8, height=5, res=300)
+ggplot(data=dados_plot %>% filter(dia_doenca>0) %>% mutate(Outcome=Desfecho),aes(y=Plaquetas,fill=Outcome,x=as.factor(dia_doenca)))+
+  geom_boxplot()+xlab("Dia de doença")+theme_light()+ 
+  scale_fill_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+
+  ylab('Platelets')+
+  ggtitle('Platelets levels by time of disease')
+# dev.off()
+
+# png("Plaquetas2.png", units="in", width=8, height=5, res=300)
+ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,Plaquetas,group=pac,color=Outcome)) + 
+  stat_smooth(method='lm',se=F) + 
+  theme_light()+ 
+  scale_color_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+ylab('Platelets')+
+  ggtitle('Platelets levels by time of disease')
+# dev.off()
+```
+
+## Gráficos Leucócitos
+
+```{r}
+# png("Leucocitos1.png", units="in", width=8, height=5, res=300)
+ggplot(data=dados_plot %>% filter(dia_doenca>0) %>% mutate(Outcome=Desfecho),aes(y=Leucocitos,fill=Outcome,x=as.factor(dia_doenca)))+
+  geom_boxplot()+xlab("Dia de doença")+theme_light()+ 
+  scale_fill_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+
+  ylab('Leukocytes')+
+  ggtitle('Leukocytes levels by time of disease')
+# dev.off()
+
+# png("Leucocitos2.png", units="in", width=8, height=5, res=300)
+ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,Leucocitos,group=pac,color=Outcome)) + 
+  stat_smooth(method='lm',se=F) + 
+  theme_light()+ 
+  scale_color_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+ylab('Leukocytes')+
+  ggtitle('Leukocytes levels by time of disease')
+# dev.off()
+```
+
+
+
 
 
 
@@ -248,9 +345,12 @@ ggplot(data=dados_plot %>% filter(dia_doenca>0),aes(y=Creatinina,fill=Desfecho,x
 
 ```{r}
 require(corrplot)
-M <- cor(dados_class_fill %>% ungroup%>%select(Ht,Ureia,TGO,TGP,Plaquetas,TAP,INR,
-                                               Creatinina,Leucocitos,BD,BI)%>% drop_na()  )
+M <- cor(dados_class_fill %>% ungroup%>%select(Ht,Urea=Ureia,ASL=TGO,ALT=TGP,Platelets=Plaquetas,TAP,INR,
+                                               Creatinine=Creatinina,Leukocytes=Leucocitos,BD,BI)%>% drop_na()  )
+
+# png("Correlacoes.png", units="in", width=8, height=5, res=300)
 corrplot(M, method = "number")
+# dev.off()
 ```
 
 
@@ -369,6 +469,27 @@ confusionMatrix(ifelse(t_pred<.5,1,0) %>% as.factor,dados_primeira_obs$Desfecho 
 
 O resultado baseando-se apenas em uma variável já tem uma discriminação aceitável, tem em vista que 88% dos casos que não vão a óbito
 tem o valor do TGO inferior a exp(8.7) = 6003 e 88% dos casos de óbito te valor do TGO superior a 6003
+
+## Gráficos
+
+
+```{r}
+ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,Creatinina,group=pac,color=Outcome)) + 
+  stat_smooth(method='lm',se=F)+ 
+  theme_light()+ 
+  scale_color_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+
+  ylab('Creatinine')+
+  ggtitle('Creatinine levels by time of disease')
+
+
+ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,TGO,group=pac,color=Outcome)) + 
+  stat_smooth(method='lm',se=F) + 
+  theme_light()+ 
+  scale_color_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+ylab('AST')+
+  ggtitle('AST levels by time of disease')
+
+```
+
 
 
 
