@@ -1,5 +1,5 @@
 ---
-title: "Relatório"
+title: "Yellow Fever Data Analysis"
 output:
   html_document: default
   pdf_document: default
@@ -20,66 +20,131 @@ require(FarctoMineR)
 require(missMDA)
 require(VIM)
 require(readxl)
+require(knitr)
+require(corrplot)
+require(kableExtra)
 ```
 
-# Análise dos dados pontuais
+# Cross-section data Analysis 
 
 
+
+This fraction of work consists in the analysis of a data set containing one register per patient. Our goal is to be able to classify 
+
+In this specific case, we use a standart logistic regression 
+for classification.
+
+
+## Reading the data
 ```{r}
-dados_adicionais <- read_excel('Casos_Hum2017_tese.xlsx') %>% filter(CLASSIF_FINAL =='CONFIRMADO' ) %>% 
-  select(ID_BM,EVOLUCAO,TGO,TGP,CREATININA,BD,BT,UREIA,FEBRE:DIARREIA,IDADE,SEXO) %>% filter(!is.na(EVOLUCAO)) %>% 
-  mutate(Desfecho = ifelse(EVOLUCAO=='OBITO',1,0)) %>% mutate_at(.vars = c('BD','BT'), .funs = as.numeric)
-
-
+cross_section <- read_excel('Casos_Hum2017_tese.xlsx') %>% filter(CLASSIF_FINAL =='CONFIRMADO' ) %>% 
+  select(ID=ID_BM,EVOLUCAO,ASL=TGO,ALT=TGP,Creatinine=CREATININA,Diarrhea=DIARREIA,BD,BT,Urea=UREIA,Fever=FEBRE,Nausea=NAUSEA,Hemorrhage=HEMORRAGIA,Age=IDADE,Sex=SEXO,Jaundice=ICTERICIA) %>% filter(!is.na(EVOLUCAO)) %>% 
+  mutate(Outcome = ifelse(EVOLUCAO=='OBITO',1,0)) %>% mutate_at(.vars = c('BD','BT'), .funs = as.numeric) %>% select(-EVOLUCAO) %>% 
+  mutate_at(.vars=c('Diarrhea','Fever','Nausea','Hemorrhage','Jaundice'),function(x){ifelse(x=="SIM",'Yes','No')})
 
 ```
 
+
+## Missing values 
+
 ```{r}
-summary_missing <- dados_adicionais %>%ungroup %>% 
+summary_missing <- cross_section %>%ungroup %>% 
   miss_var_summary()
 not_missing <-summary_missing %>% filter(n_miss==0) %>% select(variable) %>% pull()
-gg_miss_var(dados_adicionais)
-```
+gg_miss_var(cross_section %>% select(-c(ID,Age,Outcome)),show_pct=TRUE)
 
- Existe uma porcentagem de valores faltantes altíssima para algumas variáveis, a modelagem com essa parcela dos dados será um pouco complicada.
- 
- Uma saída possível é a utilização das variáveis com a menor proporção de missing (TGO, HEMORRAGIA, BT e BD).
- 
- Uma linha de raciocínio interessante é a comparação desse modelo com poucas variáveis com o modelo longitudinal buscando uma possível argumentação 
- sobre a importância de alguns resultados de exames que discriminam bem o óbito ou não.
-
-
-```{r}
-ajuste_logistica <-glm(Desfecho ~ log2(TGO)+BT+ICTERICIA+IDADE+SEXO,
-  data=dados_adicionais, family=binomial(link='logit'))
-
-ajuste_logistica %>% summary
+vis_miss(cross_section%>% select(-c(ID,Age,Outcome)))
 ```
 
 
-## Análise da predição
-```{r}
-prob=predict(ajuste_logistica,type=c("response"))
+Here we can see that some variables have a high percentage of missing values. Given that this dataset is small, dealing with missing values via value inputation could have negative outcomes. With that in mind, we should avoid using more than one variable with
+missing percentage greater than 20%  in the model fit and in no way use variables where missing values have a lower correlation per observation.
 
-dados_roc <- dados_adicionais %>%ungroup %>% 
-  select(TGO,BT,ICTERICIA,Desfecho) %>% drop_na() %>% mutate(p= prob)
+## Brief Exploratory data analysis
+
+
+```{r}
+ggplot(data=cross_section  %>% mutate(Outcome=ifelse(Outcome==1,"Death","Survival")),aes(y=log(ASL),fill=Outcome,x=Outcome))+
+  geom_boxplot()+theme_light()
+```
+
+
+```{r}
+ggplot(data=cross_section  %>% mutate(Outcome=ifelse(Outcome==1,"Death","Survival")),aes(y=BT,fill=Outcome,x=Outcome))+
+  geom_boxplot()+theme_light()
+```
+
+```{r}
+ggplot(data=cross_section  %>% mutate(Outcome=ifelse(Outcome==1,"Death","Survival")),aes(y=log(Creatinine),fill=Outcome,x=Outcome))+
+  geom_boxplot()+theme_light()
+```
+
+```{r}
+cross_section %>% select(Jaundice,Outcome) %>% table %>% kable%>%
+  kable_styling(full_width = F)
+cross_section %>% select(Jaundice,Hemorrhage) %>% table%>% kable%>%
+  kable_styling(full_width = F)
+cross_section %>% select(Jaundice,Fever) %>% table%>% kable%>%
+  kable_styling(full_width = F)
+cross_section %>% select(Jaundice,Nausea) %>% table%>% kable%>%
+  kable_styling(full_width = F)
+cross_section %>% select(Jaundice,Diarrhea) %>% table%>% kable%>%
+  kable_styling(full_width = F)
+```
+```{r}
+M <- cor(cross_section %>% select(ASL,Creatinine,BT) %>% drop_na)
+corrplot(M, method = "number")
+```
+
+It's quite clear there is some degree of difference between variables in each group so an argument can be made that it is indeed possible to make 
+a classification attempt on this dataset. 
+
+## Model fit
+```{r}
+logistic_fit <-glm(Outcome ~ log(ASL)+Jaundice+Hemorrhage+Age+Sex,
+  data=cross_section, family=binomial(link='logit'))
+
+logistic_fit %>% summary
+```
+
+The model fitness seems fairly adequate and althoug `SEX` is not significant we will keep it in the model as  a control variable.
+
+The estimated coeeficients can be interpreted as such:
+
+- Each 1 unit increase in the logarithm transformation of the ASL value increases on average the odds ratio of death exp(0.51916)=1.680615 times.
+- The obversation of Jaundice on the subject increases on average the odds ratio of death exp(0.94381)=2.569754 times.
+- The obversation of Hemorrhage on the subject increases on average the odds ratio of death exp(2.46357)=11.74667 times.
+- Each additional year of age increases on average the odds ratio of death exp(0.03624) times.
+
+## Prediction analysis 
+
+```{r}
+prob=predict(logistic_fit,type=c("response"))
+
+dados_roc <- cross_section %>%ungroup %>% 
+  select(ASL,Jaundice,Hemorrhage,Outcome) %>% drop_na() %>% mutate(p= prob)
 require(pROC)
-g <- auc(Desfecho ~ p, data = dados_roc)
+g <- auc(Outcome ~ p, data = dados_roc)
 g  
 
-dados_roc <- dados_roc %>% ungroup %>% mutate(predicao = ifelse(p>0.4,1,0))
+dados_roc <- dados_roc %>% ungroup %>% mutate(prediction = ifelse(p>0.4,1,0))
 
-confusionMatrix(dados_roc$predicao %>% as.factor,dados_roc$Desfecho%>% as.factor,positive='1')
+confusionMatrix(dados_roc$prediction %>% as.factor,dados_roc$Outcome%>% as.factor,positive='1')
 
 ```
 
+Usually is advised to split the data into training and testing sets to avoid overfiting but given the small data set and the nature of the problem the results are satisfying.
 
-# Análise dos dados longitudinais
 
-## Limpeza dos dados
-Os pacientes 773, 489 e 212 aparentam apresentar erros no registro da data de evolução.
+# Longitudinal data Analysis
 
-```{r}
+The following analysis is based on a second data set consisting of 100 individuals observed throughout several days.Just like the analysis analysis before, our interst is to create a model that can better predict if and individual with a confirmed case of yellow fever will survive the disease given certain obversed syntoms and medical exams results.
+
+
+
+```{r include=FALSE}
+# Limpeza dos dados
+#Os pacientes 773, 489 e 212 aparentam apresentar erros no registro da data de evolução.
 data <- readRDS('dados_att.rds') %>%group_by(pac,exame) %>% 
 mutate(DT_EVOL=replace(DT_EVOL, pac==773, '2017-05-26')) %>% 
   mutate(DT_EVOL=replace(DT_EVOL, pac==489, '2017-04-14')) %>% 
@@ -88,10 +153,6 @@ mutate(DT_EVOL=replace(DT_EVOL, pac==773, '2017-05-26')) %>%
   mutate(dia_doenca=DIAS,dt_inic =lag(DIAS) ) %>% select(-DIAS) %>% 
   mutate(dt_ate_inter =difftime(DT_INTERN,DT_IS,units='days') %>% as.numeric ) 
 
-```
-# Estruturação dos dados
-
-```{r}
 dados <- data %>% 
   select(pac,EVOLUCAO,exame,valor,SEXO,DT_NASC,FEBRE:DIARREIA,
          dt_inic,dia_doenca,DATA_FINAL,OBITO,dt_ate_inter) %>% 
@@ -104,10 +165,7 @@ dados <- data %>%
 data_inic <- dados %>% group_by(pac) %>% filter(is.na(dt_inic)) %>% ungroup(pac) %>% 
   select(Idade,SEXO,TGO,TGP,HEMORRAGIA,DOR_ABDOM,MIALGIA,Leucocitos,
          Bastoes,Creatinina,Linfocitos,Ureia,DATA_FINAL,Desfecho)
-```
 
-
-```{r}
 dados <- data %>% 
   select(pac,EVOLUCAO,exame,valor,SEXO,DT_NASC,FEBRE:DIARREIA,
          dt_inic,dia_doenca,DATA_FINAL,OBITO,dt_ate_inter) %>% 
@@ -115,25 +173,6 @@ dados <- data %>%
   select(-DT_NASC) %>% 
   spread(exame,valor) %>% mutate(Desfecho = ifelse(OBITO =='OBITO',1,0)) %>%
   select(-OBITO,-EVOLUCAO)
-```
-
-<!-- # Seleção de variáveis -->
-
-<!-- ```{r} -->
-
-<!-- data_inic <- dados %>% group_by(pac) %>% filter(is.na(dt_inic)) %>% ungroup(pac) %>%  -->
-<!--   select(Idade,SEXO,TGO,TGP,HEMORRAGIA,DOR_ABDOM,MIALGIA,Leucocitos, -->
-<!--          Bastoes,Creatinina,Linfocitos,Ureia,DATA_FINAL,ICTERICIA,HEMORRAGIA,Desfecho) -->
-<!-- ``` -->
-
-# Organização do banco
-
-Nesse cenário, todas as observações de um indivíduo que foi a óbito foram consideradas como tendo 
-"Óbito" como variável resposta". Essa aplicação se mostra necessária pois, obviamente, é preciso ajustar o modelo para prever o óbito do paciente antes do evento de interesse. Sendo assim, 
-
-
-```{r}
-
 dados2 <- dados %>% 
   select(pac,dt_inic,dia_doenca,DATA_FINAL,TGO,TGP,Desfecho,Idade,Ht,BD,BI,TAP,INR,
          Leucocitos,Bastoes,Creatinina,ICTERICIA,HEMORRAGIA,SEXO,dt_ate_inter
