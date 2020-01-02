@@ -58,37 +58,59 @@ vis_miss(cross_section%>% select(-c(ID,Age,Outcome)))
 Here we can see that some variables have a high percentage of missing values. Given that this dataset is small, dealing with missing values via value inputation could have negative outcomes. With that in mind, we should avoid using more than one variable with
 missing percentage greater than 20%  in the model fit and in no way use variables where missing values have a lower correlation per observation.
 
-## Brief Exploratory data analysis
+## Brief Exploratory data analysis{.tabset}
 
-
+### ASL plot
 ```{r}
 ggplot(data=cross_section  %>% mutate(Outcome=ifelse(Outcome==1,"Death","Survival")),aes(y=log(ASL),fill=Outcome,x=Outcome))+
   geom_boxplot()+theme_light()
 ```
 
-
+### BT plot
 ```{r}
 ggplot(data=cross_section  %>% mutate(Outcome=ifelse(Outcome==1,"Death","Survival")),aes(y=BT,fill=Outcome,x=Outcome))+
   geom_boxplot()+theme_light()
 ```
 
+### Creatinine plot
 ```{r}
 ggplot(data=cross_section  %>% mutate(Outcome=ifelse(Outcome==1,"Death","Survival")),aes(y=log(Creatinine),fill=Outcome,x=Outcome))+
   geom_boxplot()+theme_light()
 ```
 
-```{r}
-cross_section %>% select(Jaundice,Outcome) %>% table %>% kable%>%
+### Dichotomous covariates tables
+
+```{r echo=FALSE}
+cross_section %>% select(Jaundice,Outcome) %>% table %>% kable()%>%
   kable_styling(full_width = F)
+```
+
+
+```{r echo=FALSE}
 cross_section %>% select(Jaundice,Hemorrhage) %>% table%>% kable%>%
   kable_styling(full_width = F)
+```
+
+
+```{r echo=FALSE}
 cross_section %>% select(Jaundice,Fever) %>% table%>% kable%>%
   kable_styling(full_width = F)
+```
+
+
+```{r echo=FALSE}
 cross_section %>% select(Jaundice,Nausea) %>% table%>% kable%>%
   kable_styling(full_width = F)
+```
+
+
+```{r echo=FALSE}
 cross_section %>% select(Jaundice,Diarrhea) %>% table%>% kable%>%
   kable_styling(full_width = F)
 ```
+
+
+## Covariates correlation plot 
 ```{r}
 M <- cor(cross_section %>% select(ASL,Creatinine,BT) %>% drop_na)
 corrplot(M, method = "number")
@@ -131,7 +153,7 @@ Usually is advised to split the data into training and testing sets to avoid ove
 
 # Longitudinal data Analysis
 
-The following analysis is based on a second data set consisting of 100 individuals observed throughout several days.Just like the analysis analysis before, our interst is to create a model that can better predict if and individual with a confirmed case of yellow fever will survive the disease given certain obversed syntoms and medical exams results.
+The following analysis is based on a second data set consisting of 100 individuals observed throughout several days.Just like the analysis analysis before, our interst is to create a model that can better predict if and individual with a confirmed case of yellow fever will survive the disease given certain obversed symptoms and medical exams results.
 
 
 
@@ -218,7 +240,7 @@ dados_class <- dados2 %>% group_by(pac) %>% mutate(Desfecho=max(Desfecho))%>%
 <!-- ``` -->
 
 
-# Análise de dados Faltantes
+## Missing data 
 
 ```{r}
 summary_missing <- dados_class %>%ungroup %>% 
@@ -230,7 +252,7 @@ gg_miss_var(dados_class %>% ungroup %>%
 
  Devemos evitar utilizar variáveis com muitos valores faltantes
 
-##Inputação de valores utilizando substituindo o valor faltante pelo registro do dia anterior. 
+## Inputação de valores utilizando substituindo o valor faltante pelo registro do dia anterior. 
  
 Caso o registro do dia anterior também esteja faltante, o registro do dia posterior é utilizado.
 
@@ -252,8 +274,9 @@ dados_plot %>%ungroup() %>%  select(HEMORRAGIA,Desfecho) %>% table
 dados_plot %>%ungroup() %>%  select(ICTERICIA,Desfecho) %>% table
 ```
 
+## Covariates Analysis {.tabset}
 
-## INR plot
+### INR 
 ```{r}
 #png("Creatinina1.png", units="in", width=8, height=5, res=300)
 ggplot(data=dados_plot %>% filter(dia_doenca>0) %>% mutate(Outcome=Desfecho),aes(y=INR,fill=Outcome,x=as.factor(dia_doenca)))+
@@ -272,7 +295,7 @@ ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,INR,group
 # dev.off()
 ```
 
-## Gráfico TGO
+### ASL
 
 ```{r}
 # png("TGO1.png", units="in", width=8, height=5, res=300)
@@ -292,7 +315,7 @@ ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,TGO,group
 ```
 
 
-## Gráfico TGP
+### ALT
 
 
 ```{r}
@@ -313,7 +336,7 @@ ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,TGP,group
 ```
 
 
-## Gráficos Plaquetas
+### Platelets
 
 ```{r}
 # png("Plaquetas1.png", units="in", width=8, height=5, res=300)
@@ -332,7 +355,7 @@ ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,Plaquetas
 # dev.off()
 ```
 
-## Gráficos Leucócitos
+### Leukocytes
 
 ```{r}
 # png("Leucocitos1.png", units="in", width=8, height=5, res=300)
@@ -350,9 +373,6 @@ ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,Leucocito
   ggtitle('Leukocytes levels by time of disease')
 # dev.off()
 ```
-
-
-
 
 
 
@@ -374,10 +394,13 @@ Ainda existem  dados faltantes de ICTERICIA que não podem ser inputados pois n�
 
 # Aplicação de equações de estimação generalizadas (GEE)
 
-O método de equações de estimação generalizadas (GEE) é uma alternativa para a modelagem de dados longitudinais.
+O método de equações de estimação generalizadas (GEE) é uma alternativa para a modelagem de dados longitudinais. Essa aplicação estima efeitos médios
+populacionais, que satisfazem a motivação da pesquisa de obter uma análise que seja reproduzível em diferentes indivíduos. 
 
-Essa técnica de modelagem requer a indicação de uma estrutura de correlação entre o tempo e estima o efeito médio populacional 
-das variáveis explicativas  levando em consideração a correlação interna de cada paciente.
+
+Essa técnica de modelagem requer a indicação de uma estrutura de correlação entre os tempos observados de cada indivíduo e estima o efeito médio populacional das variáveis explicativas. Neste caso foi utilizada uma estrutura de correlação temporal baseada em um processo autoregressivo de ordem 1.
+
+
  
 O algorítmo obtem a estimativa dos coeficientes $\beta$ através da maximização da equação abaixo em $\beta$:
 
@@ -388,14 +411,17 @@ Onde:
 
 - $\beta_p, \ p = 1,\ldots,k$ são os coeficientes das variáveis explicativas
 
-- $V_i$ é a estrutura de correlação do tempo.
+- $V_i$ é a estrutura de correlação do indivíduo $i$.
 
 
-Nessa aplicação as GEE nos fornencem uma estimativa da probabilidade de óbito para um indivíduo infectado com o vírus da febre amarela, independe do dia de doença em que ele se encontrar.
+Nessa aplicação o modelo fornence uma estimativa da probabilidade de óbito para um indivíduo infectado com o vírus da febre amarela, independe do dia de doença em que ele se encontrar a partir de uma série de covariáveis.
+
+O modelo foi ajustado seguindo um procedimento em etapas ("step"), porém, as etapas não estão explícitas nesse código visando a simplificação do 
+relatório. Um ponto a ser observado é o fato do GEE ser um método que utiliza a quasi-verossimilhança, sendo assim, não é possível 
+utilizar critérios baseados na verossimilhança (AIC, BIC) para comparar ajustes de diferentes modelos, então, foi utilizado como critério de seleção de modelos a acurácia de predição.
+
 
 ```{r}
-require(geepack)
-corr_struc <-  CVTuningCov::AR1(13,0.9)
 
 require(geepack)
 dados_scaled <-  dados2  %>% mutate(TGO=log(TGO)) %>% select(-dt_inic) %>%
@@ -412,10 +438,21 @@ summary(ajuste_gee)
 ```{r}
 anova(ajuste_gee)
 ```
+
+## Estrutura de correlações
+
+Foram consideradas as observações com no máximo 15 dias de doença, sendo assim, a matrix de correlação é a seguinte:
+
+```{r}
+require(geepack)
+corr_struc <-  CVTuningCov::AR1(15,0.801	)
+corr_struc %>% kable('latex',col.names = paste("Dia",1:15))
+```
+
 ## Explicação do modelo
 
 Foi-se escolhido um modelo com estrutura de correlações baseadas em um processo auto regressivo de ordem um que resultou em um valor
-$\alpha$ para a matriz de correlações de 0.972. Optou-se por utilizar o logarítmo natural da variável TGO afim de suavizar o comportamento dessa variável. Além disso, a variável de idade foi dicotomizada afim de melhor sua significância estatística.
+$\alpha$ para a matriz de correlações de 0.88 Optou-se por utilizar o logarítmo natural da variável TGO afim de suavizar o comportamento dessa variável. Além disso, a variável de idade foi dicotomizada de acordo com uma árove de partição auxiliar afim de melhor sua significância estatística.
 
 
 
@@ -425,13 +462,11 @@ Estimativas Negativas indicam diminuição na razão de chances de óbito e esti
 mesma interpretação da regressão logística.
 
 
+- Um aumento de uma unidade no logratímo do TGO aumenta razão de chances de óbito em exp(0.3867)=1.47 vezes
 
+- A presença do sintoma de Hemorragia aumenta a razão de chances de óbito em exp(1.6151)=5.03 vezes.
 
-- Um aumento de uma unidade no logratímo do TGO aumenta razão de chances de óbito em exp(0.0641)=1.07 vezes
-
-- A presença do sintoma de Icterícia aumenta a razão de chances de óbito em exp(1.6710)=5.32 vezes.
-
-- O aumento de uma unidade na variável Creatinina aumenta a razão de chances de cura em exp() = vezes. 
+- O aumento de uma unidade na variável INR aumenta a razão de chances de cura em exp(0.2640) =1.3 vezes. 
 
 As variáveis de SEXO e idade não se mostraram significativas mas foram incluídas.
 
@@ -446,10 +481,17 @@ mutate(p= prob)
 require(pROC)
 g <- auc(Desfecho ~ p, data = dados_roc)
 g  
-dados_roc <- dados_roc %>% ungroup %>% mutate(predicao = ifelse(p>0.375,1,0))
-confusionMatrix(dados_roc$predicao %>% as.factor,dados_roc$Desfecho%>% as.factor,positive='1')
+
+dados_roc <- dados_roc %>% ungroup %>% mutate(prediction = ifelse(p>0.375,1,0))
+confusionMatrix(dados_roc$prediction %>% as.factor,dados_roc$Desfecho%>% as.factor,positive='1')
+
 ```
 
+É importante notar que apesar da acurácia não ser extremamente alta (0.841), estamos falando da acurária de predição para todos os registros observados. Em alguns períodos de doença a diferenciação de indivíduos é de fato mais complexa pois a alteração de alguns exames ou sintoma pode se dar pela cura ou pelo enfraquecimento do organismo de um indivíduo perto do óbito. Considerando essa ressalva, ainda sim, o modelo tem uma performance boa com AUC de 0.896 e acurácia de predição de .841.
+
+
+Uma análise de diagnóstico muito interesse que também pode ser feita é observar a probabilidade de óbito predita para os indivíduos que de fato foram a óbito
+no período inicial de acompanhamento.
 
 ```{r}
 algum_acerto <- dados_roc %>% select(pac,p,Desfecho,dia_doenca) %>%group_by(pac) %>%  filter(Desfecho ==1)
@@ -457,13 +499,16 @@ algum_acerto %>%filter(p==max(p)) %>%ungroup %>%  summarise(median(p))
 algum_acerto %>%filter(p==max(p)) %>%ungroup %>%  summarise(median(dia_doenca))
 ```
 
+A probabilidade máxima mediana atribuída para os indivíduos que foram a óbito é de 0.73 e o tempo mediano que o valor máximo da probabilidade de óbbito foi atribuída é
+no quinto dia. O que essa informação nos diz é que o modelo é capaz de detectar indivíduos que poderão ir a óbito no estágios iniciais da doença com uma acurária considerável.
 
-É importante notar que apesar da acurácia não ser extremamente alta, estamos falando da acurária de predição para todos os registros observados. Em alguns períodos de doença a diferenciação de indivíduos pode ser mais complexa.
+
+
 
 
 # Árvore de Decisão
-Podemos nos basear no primeiro registro observado para construir uma árvore de decisão para tentar prever o óbito.
-
+Podemos também nos basear no primeiro registro observado para construir uma árvore de decisão para tentar prever o óbito.
+ 
 ```{r}
 require(rpart)
 require(rattle)
@@ -473,28 +518,14 @@ dados_primeira_obs=dados2  %>% mutate(Plaquetas=log2(Plaquetas),Leucocitos=log2(
 Arvore = rpart(Desfecho~ Idade+SEXO+TGO+ICTERICIA,data=dados_primeira_obs,maxdepth=6,method='class')
 fancyRpartPlot(Arvore)
 t_pred <- predict(Arvore,dados_primeira_obs)[,1]
-confusionMatrix(ifelse(t_pred<.5,1,0) %>% as.factor,dados_primeira_obs$Desfecho %>% as.factor,positive='1')
+confusionMatrix(ifelse(t_pred<.375,1,0) %>% as.factor,dados_primeira_obs$Desfecho %>% as.factor,positive='1')
 ```
 
 O resultado baseando-se apenas em uma variável já tem uma discriminação aceitável, tem em vista que 88% dos casos que não vão a óbito
-tem o valor do TGO inferior a exp(8.7) = 6003 e 88% dos casos de óbito te valor do TGO superior a 6003
+tem o valor do TGO inferior a exp(8.7) = 6003 e 88% dos casos de óbito te valor do TGO superior a 6003. 
 
-## Gráficos
-
-
-```{r}
-ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,Creatinina,group=pac,color=Outcome)) + 
-  stat_smooth(method='lm',se=F)+ 
-  theme_light()+ 
-  scale_color_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+
-  ylab('Creatinine')+
-  ggtitle('Creatinine levels by time of disease')
-ggplot(dados2 %>% mutate(Outcome = as.factor(Desfecho)),aes(dia_doenca,TGO,group=pac,color=Outcome)) + 
-  stat_smooth(method='lm',se=F) + 
-  theme_light()+ 
-  scale_color_manual(labels = c('Survival','Death'),values=c('cadetblue3','firebrick1'))+xlab('Time of disease')+ylab('AST')+
-  ggtitle('AST levels by time of disease')
-```
+A conclusão que podemos ter com essa tentativa é que o TGO é uma variável muito interessante por si só que poderia ter resultados interessantes caso
+fosse necessário a elaboração de um modelo mais simples de ser aplicado.
 
 
 
