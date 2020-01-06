@@ -446,7 +446,7 @@ Foram consideradas as observações com no máximo 15 dias de doença, sendo ass
 ```{r}
 require(geepack)
 corr_struc <-  CVTuningCov::AR1(15,0.801	)
-corr_struc %>% kable('latex',col.names = paste("Dia",1:15))
+corr_struc %>% kable(col.names = paste("Dia",1:15))
 ```
 
 ## Explicação do modelo
@@ -510,22 +510,39 @@ no quinto dia. O que essa informação nos diz é que o modelo é capaz de detec
 Podemos também nos basear no primeiro registro observado para construir uma árvore de decisão para tentar prever o óbito.
  
 ```{r}
-require(rpart)
-require(rattle)
-dados_primeira_obs=dados2  %>% mutate(Plaquetas=log2(Plaquetas),Leucocitos=log2(Leucocitos),
-                                       TGO=log(TGO),TGP=log2(TGP)) %>% select(-dt_inic) %>% group_by(pac) %>% 
-  filter(dia_doenca==min(dia_doenca))
-Arvore = rpart(Desfecho~ Idade+SEXO+TGO+ICTERICIA,data=dados_primeira_obs,maxdepth=6,method='class')
-fancyRpartPlot(Arvore)
-t_pred <- predict(Arvore,dados_primeira_obs)[,1]
-confusionMatrix(ifelse(t_pred<.375,1,0) %>% as.factor,dados_primeira_obs$Desfecho %>% as.factor,positive='1')
+require(partykit)
+dados_primeira_obs= dados2   %>% select(-dt_inic) %>%
+  ungroup %>% mutate(pac = as.factor(pac)) %>%
+  select(TGO,pac,dia_doenca,Desfecho,SEXO,Idade,INR,Creatinina)%>%
+  group_by(pac) %>% 
+  drop_na() %>% mutate(Idade = ifelse(Idade<40,'<40','>40')) %>% group_by(pac) %>% 
+  filter(dia_doenca==min(dia_doenca)) %>% ungroup %>% 
+    mutate(Desfecho_lab = ifelse(Desfecho==1,'Death','Survival')) %>% 
+  mutate_at(.vars=vars(Desfecho_lab,SEXO,Idade,dia_doenca),as.factor) 
+
+Arvore = ctree(Desfecho_lab~ Idade+SEXO+TGO+INR+Creatinina,data=dados_primeira_obs,minbucket=15)
+plot(Arvore,terminal_panel = node_barplot(Arvore,beside=TRUE,text='horizontal'), gp = gpar(fontsize = 8))
+  t_pred <- predict(Arvore,dados_primeira_obs) 
+  t_pred_bin <- ifelse(t_pred=='Death',1,0)
+confusionMatrix(t_pred_bin %>% as.factor,dados_primeira_obs$Desfecho %>% as.factor,positive='1')
 ```
 
-O resultado baseando-se apenas em uma variável já tem uma discriminação aceitável, tem em vista que 88% dos casos que não vão a óbito
-tem o valor do TGO inferior a exp(8.7) = 6003 e 88% dos casos de óbito te valor do TGO superior a 6003. 
+Tendo em vista que a técnica utilizada pode gerar sobreajuste e não estamos usando partição de treino e teste, um número mínimo de 15 indivíduos por classe foi estabelecido, além disso, foi considerada a primeira observação registrada na observação dos dados longitudinais.
 
-A conclusão que podemos ter com essa tentativa é que o TGO é uma variável muito interessante por si só que poderia ter resultados interessantes caso
-fosse necessário a elaboração de um modelo mais simples de ser aplicado.
+
+O método de árvore de decisão divide os pacientes em 4 grupos, o primeiro grupo de 15 pacientes tem  taxa de sobrevivência de 86.7%. Este grupo é composto por pacientes com TGO inferior a 5424, INR inferior a 1.55 e Creatinina inferior a 0.7.
+
+O segundo grupo, com 30 pacientes, tem taxa de sobrevivêndia de 96.7%. Este grupo é composto por pacientes com TGO inferior a 5424, INR inferior a 1.55 e Creatinina superior a 0.7.
+
+O terceiro grupo, com 15 pacientes, tem taxa de sobrevivência de 80%. Este grupo é composto por pacientes com TGO inferior a 5424 e INR superior a 1.55.
+
+O quarto grupo tem taxa de sobrevivência de apenas 18.8% e contém 32 pacientes. Este grupo é composto por pacientes que possuem o TGO superior a 5424.
+
+A partir disso podemos concluir que o nível de TGO é uma variável de extrema importância, conseguindo discernir bem pacientes que irão a óbito ou não, além disso,
+o INR e a Creatinina nos permite identificar casos de óbito quando o paciente apresenta um nível baixo de TGO.
+
+
+
 
 
 
