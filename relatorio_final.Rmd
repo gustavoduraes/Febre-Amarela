@@ -441,12 +441,17 @@ anova(ajuste_gee)
 
 ## Estrutura de correlações
 
-Foram consideradas as observações com no máximo 15 dias de doença, sendo assim, a matrix de correlação é a seguinte:
+Foram consideradas as observações com no máximo 15 dias de doença, sendo assim, a matriz de correlação considerando valores arredondados e $alpha$ estimado conjuntamente com o ajuste do modelo é:
 
 ```{r}
 require(geepack)
-corr_struc <-  CVTuningCov::AR1(15,0.801	)
-corr_struc %>% kable(col.names = paste("Dia",1:15))
+require(magrittr)
+corr_struc <-  CVTuningCov::AR1(15,0.801) %>% round(2)
+rownames(corr_struc)= paste("Dia",1:15)
+corr_struc %<>% data.frame 
+df_corr <- rownames_to_column(corr_struc, "Dia")
+df_corr %>% kable(col.names= c("",paste("Dia",1:15))) %>% kable_styling("bordered")%>%
+  column_spec(1, bold = T,width_min = "2cm",color='black')
 ```
 
 ## Explicação do modelo
